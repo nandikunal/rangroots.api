@@ -216,12 +216,24 @@ def compute_festivals(year: int, city_id: str) -> dict:
     NOTE: FESTIVALS entries currently store rule_hint text, not computable
     rules. This returns the static curated list annotated with the year;
     computing actual per-year dates from tithi/nakshatra rules is a follow-up
-    (see festivals.py docstring)."""
+    (see festivals.py docstring).
+
+    Each returned entry includes "date" (mapped from fixed_date) and
+    "category" (festival | deity | observance | other) alongside the
+    existing id/name/type/rule_hint/fixed_date fields, matching
+    schemas.FestivalEntry.
+    """
     return {
         "year": year,
         "city_id": city_id,
         "festivals": [
-            {**f, "year": year} for f in FESTIVALS
+            {
+                **f,
+                "date": f.get("fixed_date"),
+                "category": f.get("category", "other"),
+                "year": year,
+            }
+            for f in FESTIVALS
         ],
     }
 
