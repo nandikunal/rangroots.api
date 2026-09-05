@@ -7,7 +7,7 @@ import os
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.schemas import CalendarHighlightsResponse, DailyPanchangResponse, FestivalsResponse
+from app.schemas import CalendarHighlightsResponse, DailyPanchangResponse, FestivalsResponse, ResolvedLocationResponse
 from app import panchang
 
 app = FastAPI(title="Rang Roots Calendar Service", version="0.1.0")
@@ -34,21 +34,33 @@ def get_daily_panchang(date: str, city_id: str | None = None, lat: float | None 
 
 
 @app.get("/api/calendar/monthly")
-def get_monthly_panchang(month: str, city_id: str):
+def get_monthly_panchang(month: str, city_id: str | None = None, lat: float | None = None, lng: float | None = None):
     """Returns list of days with key panchang info and festivals for the month."""
-    return panchang.compute_monthly(month=month, city_id=city_id)
+    if city_id is None and (lat is None or lng is None):
+        raise HTTPException(status_code=400, detail="Provide city_id or both lat and lng")
+    return panchang.compute_monthly(month=month, city_id=city_id, lat=lat, lng=lng)
 
 
 @app.get("/api/calendar/festivals", response_model=FestivalsResponse)
-def get_festivals(year: int, city_id: str):
+def get_festivals(year: int, city_id: str | None = None, lat: float | None = None, lng: float | None = None):
     """Returns major festivals for the year with computed local dates."""
-    return panchang.compute_festivals(year=year, city_id=city_id)
+    if city_id is None and (lat is None or lng is None):
+        raise HTTPException(status_code=400, detail="Provide city_id or both lat and lng")
+    return panchang.compute_festivals(year=year, city_id=city_id, lat=lat, lng=lng)
 
 
 @app.get("/api/calendar/highlights", response_model=CalendarHighlightsResponse)
-def get_calendar_highlights(month: str, city_id: str):
+def get_calendar_highlights(month: str, city_id: str | None = None, lat: float | None = None, lng: float | None = None):
     """Returns month-spanning highlights used by the homepage calendar frame."""
-    return panchang.compute_monthly_highlights(month=month, city_id=city_id)
+    if city_id is None and (lat is None or lng is None):
+        raise HTTPException(status_code=400, detail="Provide city_id or both lat and lng")
+    return panchang.compute_monthly_highlights(month=month, city_id=city_id, lat=lat, lng=lng)
+
+
+@app.get("/api/calendar/location-context", response_model=ResolvedLocationResponse)
+def get_location_context(lat: float, lng: float):
+    """Resolves a requested lat/lng to the closest supported city for editorial calendar fallbacks."""
+    return panchang.resolve_location(lat=lat, lng=lng)
 
 
 @app.post("/api/calendar/ritual-muhurta")

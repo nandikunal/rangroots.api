@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone, date as date_type
 from typing import List, Dict, Any
 
 from app import ephemeris
-from app.cities import get_city
+from app.cities import get_city, resolve_nearest_city
 from app.festivals import FESTIVALS
 
 
@@ -152,6 +152,38 @@ def _parse_date(date_str: str) -> date_type:
     return datetime.strptime(date_str, "%Y-%m-%d").date()
 
 
+def _build_location_context(city_id: str | None = None, lat: float | None = None, lng: float | None = None) -> dict | None:
+    if lat is not None and lng is not None:
+        resolved_city_id, resolved_city, distance_km = resolve_nearest_city(float(lat), float(lng))
+        return {
+            "requested_latitude": float(lat),
+            "requested_longitude": float(lng),
+            "resolved_city_id": resolved_city_id,
+            "resolved_city_name": resolved_city["name"],
+            "timezone": resolved_city["timezone"],
+            "distance_km": distance_km,
+        }
+
+    if city_id is not None:
+        city = get_city(city_id)
+        return {
+            "resolved_city_id": city_id,
+            "resolved_city_name": city["name"],
+            "timezone": city["timezone"],
+            "distance_km": 0.0,
+        }
+
+    return None
+
+
+def resolve_location(city_id: str | None = None, lat: float | None = None, lng: float | None = None) -> dict:
+    if lat is not None and lng is not None:
+        return _build_location_context(lat=lat, lng=lng)
+    if city_id is not None:
+        return _build_location_context(city_id=city_id)
+    raise ValueError("Either city_id or both lat and lng must be provided")
+
+
 def _festival_start(entry: dict) -> date_type:
     return _parse_date(entry["fixed_date"])
 
@@ -171,10 +203,12 @@ def _festival_overlaps_month(entry: dict, year: int, month_num: int) -> bool:
 
 def compute_daily(date: str, city_id: str | None = None, lat: float | None = None, lng: float | None = None) -> dict:
     """Pure function: (date, city) or (date, lat/lng) -> panchang. Deterministic, cacheable."""
+    location_context = _build_location_context(city_id=city_id, lat=lat, lng=lng)
+
     if lat is not None and lng is not None:
         latitude = float(lat)
         longitude = float(lng)
-        resolved_city_id = city_id or "custom"
+        resolved_city_id = location_context["resolved_city_id"] if location_context is not None else (city_id or "custom")
     else:
         if city_id is None:
             raise ValueError("Either city_id or both lat and lng must be provided")
@@ -211,6 +245,7 @@ def compute_daily(date: str, city_id: str | None = None, lat: float | None = Non
     return {
         "date": date,
         "city_id": resolved_city_id,
+        "location_context": location_context,
         "tithi": TITHI_NAMES[tithi_idx],
         "paksha": paksha,
         "nakshatra": NAKSHATRA_NAMES[nakshatra_idx],
@@ -226,22 +261,28 @@ def compute_daily(date: str, city_id: str | None = None, lat: float | None = Non
     }
 
 
-def compute_monthly(month: str, city_id: str) -> dict:
+def compute_monthly(month: str, city_id: str | None = None, lat: float | None = None, lng: float | None = None) -> dict:
     """Iterates compute_daily() across every day in the given YYYY-MM month."""
     import calendar as pycalendar
 
     year, month_num = (int(part) for part in month.split("-"))
     days_in_month = pycalendar.monthrange(year, month_num)[1]
+    location_context = _build_location_context(city_id=city_id, lat=lat, lng=lng)
 
     days = []
     for day in range(1, days_in_month + 1):
         date_str = f"{year:04d}-{month_num:02d}-{day:02d}"
-        days.append(compute_daily(date=date_str, city_id=city_id))
+        days.append(compute_daily(date=date_str, city_id=city_id, lat=lat, lng=lng))
 
-    return {"month": month, "city_id": city_id, "days": days}
+    return {
+        "month": month,
+        "city_id": location_context["resolved_city_id"] if location_context is not None else city_id,
+        "location_context": location_context,
+        "days": days,
+    }
 
 
-def compute_festivals(year: int, city_id: str) -> dict:
+def compute_festivals(year: int, city_id: str | None = None, lat: float | None = None, lng: float | None = None) -> dict:
     """Applies the curated festival ruleset (festivals.py) for the given year.
 
     NOTE: FESTIVALS entries currently store rule_hint text, not computable
@@ -254,9 +295,13 @@ def compute_festivals(year: int, city_id: str) -> dict:
     existing id/name/type/rule_hint/fixed_date fields, matching
     schemas.FestivalEntry.
     """
+    location_context = _build_location_context(city_id=city_id, lat=lat, lng=lng)
+    resolved_city_id = location_context["resolved_city_id"] if location_context is not None else city_id
+
     return {
         "year": year,
-        "city_id": city_id,
+        "city_id": resolved_city_id,
+        "location_context": location_context,
         "festivals": [
             {
                 **f,
@@ -270,9 +315,11 @@ def compute_festivals(year: int, city_id: str) -> dict:
     }
 
 
-def compute_monthly_highlights(month: str, city_id: str) -> dict:
+def compute_monthly_highlights(month: str, city_id: str | None = None, lat: float | None = None, lng: float | None = None) -> dict:
     """Returns festival spans that overlap the requested YYYY-MM month."""
     year, month_num = (int(part) for part in month.split("-"))
+    location_context = _build_location_context(city_id=city_id, lat=lat, lng=lng)
+    resolved_city_id = location_context["resolved_city_id"] if location_context is not None else city_id
     highlights = [
         {
             "id": festival["id"],
@@ -285,7 +332,12 @@ def compute_monthly_highlights(month: str, city_id: str) -> dict:
         if _festival_overlaps_month(festival, year, month_num)
     ]
     highlights.sort(key=lambda festival: (festival["start_date"], festival["name"]))
-    return {"month": month, "city_id": city_id, "highlights": highlights}
+    return {
+        "month": month,
+        "city_id": resolved_city_id,
+        "location_context": location_context,
+        "highlights": highlights,
+    }
 
 
 def compute_ritual_windows(city_id: str, date_from: str, date_to: str, ritual_type: str) -> dict:
