@@ -33,6 +33,47 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+## Deployment environment and health checks
+
+These services are consumed by the frontend in `rangroots.app` through its same-origin
+homepage aggregation route. The current deployed frontend expects:
+
+- Calendar service base URL: `https://rangroots.onrender.com`
+- Events service base URL: `https://rangroots-events-service.onrender.com`
+
+### Calendar service public endpoints
+
+- `GET /api/calendar/daily?date=YYYY-MM-DD&city_id=berlin`
+- `GET /api/calendar/daily?date=YYYY-MM-DD&lat=52.52&lng=13.4`
+- `GET /api/calendar/monthly?month=YYYY-MM&city_id=berlin`
+- `GET /api/calendar/monthly?month=YYYY-MM&lat=52.52&lng=13.4`
+- `GET /api/calendar/festivals?year=2026&city_id=berlin`
+- `GET /api/calendar/festivals?year=2026&lat=52.52&lng=13.4`
+- `GET /api/calendar/highlights?month=2026-09&city_id=berlin`
+- `GET /api/calendar/highlights?month=2026-09&lat=52.52&lng=13.4`
+- `GET /api/calendar/location-context?lat=52.52&lng=13.4`
+
+### Events service public endpoints
+
+- `GET /api/events?city_id=berlin&from=2026-09-01`
+- `GET /api/events/{event_id}`
+
+### Smoke tests
+
+```bash
+curl -s https://rangroots.onrender.com/api/calendar/location-context?lat=52.52\&lng=13.4
+curl -s https://rangroots.onrender.com/api/calendar/highlights?month=2026-09\&city_id=berlin
+curl -s https://rangroots-events-service.onrender.com/api/events?city_id=berlin\&from=2026-09-01
+```
+
+Expected MVP result:
+
+- calendar responses return festival and location-context payloads
+- events responses return seeded Berlin-facing event records
+
+If the frontend landing page shows missing live data, validate these backend URLs first, then the
+frontend `/api/homepage-content` route in the app repo.
+
 ## Repository layout
 
 ```
