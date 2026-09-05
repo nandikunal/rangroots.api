@@ -7,7 +7,7 @@ import os
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.schemas import CalendarHighlightsResponse, DailyPanchangResponse, FestivalsResponse, ResolvedLocationResponse
+from app.schemas import CalendarHighlightsResponse, DailyPanchangResponse, FestivalsResponse, MonthlyPanchangResponse, ResolvedLocationResponse
 from app import panchang
 
 app = FastAPI(title="Rang Roots Calendar Service", version="0.1.0")
@@ -33,7 +33,7 @@ def get_daily_panchang(date: str, city_id: str | None = None, lat: float | None 
     return panchang.compute_daily(date=date, city_id=city_id, lat=lat, lng=lng)
 
 
-@app.get("/api/calendar/monthly")
+@app.get("/api/calendar/monthly", response_model=MonthlyPanchangResponse)
 def get_monthly_panchang(month: str, city_id: str | None = None, lat: float | None = None, lng: float | None = None):
     """Returns list of days with key panchang info and festivals for the month."""
     if city_id is None and (lat is None or lng is None):

@@ -3,10 +3,19 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
 
+class LocationContext(BaseModel):
+    requested_latitude: Optional[float] = None
+    requested_longitude: Optional[float] = None
+    resolved_city_id: str
+    resolved_city_name: str
+    timezone: str
+    distance_km: float
+
+
 class DailyPanchangResponse(BaseModel):
     date: str
     city_id: str
-    location_context: Optional[dict] = None
+    location_context: Optional[LocationContext] = None
     tithi: str
     paksha: str
     nakshatra: str
@@ -40,7 +49,7 @@ class FestivalEntry(BaseModel):
 class FestivalsResponse(BaseModel):
     year: int
     city_id: str
-    location_context: Optional[dict] = None
+    location_context: Optional[LocationContext] = None
     festivals: List[FestivalEntry] = []
 
 
@@ -55,14 +64,17 @@ class CalendarHighlight(BaseModel):
 class CalendarHighlightsResponse(BaseModel):
     month: str
     city_id: str
-    location_context: Optional[dict] = None
+    location_context: Optional[LocationContext] = None
     highlights: List[CalendarHighlight] = []
 
 
-class ResolvedLocationResponse(BaseModel):
+class MonthlyPanchangResponse(BaseModel):
+    month: str
+    city_id: str
+    location_context: Optional[LocationContext] = None
+    days: List[DailyPanchangResponse] = []
+
+
+class ResolvedLocationResponse(LocationContext):
     requested_latitude: float
     requested_longitude: float
-    resolved_city_id: str
-    resolved_city_name: str
-    timezone: str
-    distance_km: float
