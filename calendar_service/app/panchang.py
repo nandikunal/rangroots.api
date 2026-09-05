@@ -152,9 +152,37 @@ def _parse_date(date_str: str) -> date_type:
     return datetime.strptime(date_str, "%Y-%m-%d").date()
 
 
-def compute_daily(date: str, city_id: str) -> dict:
-    """Pure function: (date, city) -> panchang. Deterministic, cacheable."""
-    city = get_city(city_id)
+def _festival_start(entry: dict) -> date_type:
+    return _parse_date(entry["fixed_date"])
+
+
+def _festival_end(entry: dict) -> date_type:
+    return _parse_date(entry.get("end_date") or entry["fixed_date"])
+
+
+def _festival_overlaps_month(entry: dict, year: int, month_num: int) -> bool:
+    month_start = date_type(year, month_num, 1)
+    if month_num == 12:
+        month_end = date_type(year + 1, 1, 1) - timedelta(days=1)
+    else:
+        month_end = date_type(year, month_num + 1, 1) - timedelta(days=1)
+    return _festival_start(entry) <= month_end and _festival_end(entry) >= month_start
+
+
+def compute_daily(date: str, city_id: str | None = None, lat: float | None = None, lng: float | None = None) -> dict:
+    """Pure function: (date, city) or (date, lat/lng) -> panchang. Deterministic, cacheable."""
+    if lat is not None and lng is not None:
+        latitude = float(lat)
+        longitude = float(lng)
+        resolved_city_id = city_id or "custom"
+    else:
+        if city_id is None:
+            raise ValueError("Either city_id or both lat and lng must be provided")
+        city = get_city(city_id)
+        latitude = city["latitude"]
+        longitude = city["longitude"]
+        resolved_city_id = city_id
+
     d = _parse_date(date)
 
     noon_utc = datetime(d.year, d.month, d.day, 12, 0, 0, tzinfo=timezone.utc)
@@ -168,18 +196,21 @@ def compute_daily(date: str, city_id: str) -> dict:
 
     sunrise, sunset = ephemeris.get_sunrise_sunset(
         datetime(d.year, d.month, d.day, tzinfo=timezone.utc),
-        city["latitude"], city["longitude"],
+        latitude,
+        longitude,
     )
 
     python_weekday = d.weekday()  # Monday=0 ... Sunday=6
     rahu_kaal = _compute_rahu_kaal(sunrise, sunset, python_weekday)
     abhijit = _compute_abhijit_muhurta(sunrise, sunset)
 
-    todays_festivals = [f["name"] for f in FESTIVALS if f.get("fixed_date") == date]
+    todays_festivals = [
+        f["name"] for f in FESTIVALS if _festival_start(f) <= d <= _festival_end(f)
+    ]
 
     return {
         "date": date,
-        "city_id": city_id,
+        "city_id": resolved_city_id,
         "tithi": TITHI_NAMES[tithi_idx],
         "paksha": paksha,
         "nakshatra": NAKSHATRA_NAMES[nakshatra_idx],
@@ -234,8 +265,27 @@ def compute_festivals(year: int, city_id: str) -> dict:
                 "year": year,
             }
             for f in FESTIVALS
+            if _festival_start(f).year == year or _festival_end(f).year == year
         ],
     }
+
+
+def compute_monthly_highlights(month: str, city_id: str) -> dict:
+    """Returns festival spans that overlap the requested YYYY-MM month."""
+    year, month_num = (int(part) for part in month.split("-"))
+    highlights = [
+        {
+            "id": festival["id"],
+            "name": festival["name"],
+            "start_date": festival["fixed_date"],
+            "end_date": festival.get("end_date") or festival["fixed_date"],
+            "category": festival.get("category", "other"),
+        }
+        for festival in FESTIVALS
+        if _festival_overlaps_month(festival, year, month_num)
+    ]
+    highlights.sort(key=lambda festival: (festival["start_date"], festival["name"]))
+    return {"month": month, "city_id": city_id, "highlights": highlights}
 
 
 def compute_ritual_windows(city_id: str, date_from: str, date_to: str, ritual_type: str) -> dict:

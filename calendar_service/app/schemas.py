@@ -28,6 +28,7 @@ class FestivalEntry(BaseModel):
     id: str
     name: str
     date: str
+    end_date: Optional[str] = None
     category: str = "other"
     type: Optional[str] = None
     rule_hint: Optional[str] = None
@@ -39,3 +40,17 @@ class FestivalsResponse(BaseModel):
     year: int
     city_id: str
     festivals: List[FestivalEntry] = []
+
+
+class CalendarHighlight(BaseModel):
+    id: str
+    name: str
+    start_date: str
+    end_date: str
+    category: str = "other"
+
+
+class CalendarHighlightsResponse(BaseModel):
+    month: str
+    city_id: str
+    highlights: List[CalendarHighlight] = []
